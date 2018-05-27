@@ -43,6 +43,7 @@ HTML('<hr style="color: gray;">')
 selectInput("clusterMethod", tags$h4("Clustering Method"), choices =  list ("PAM", "HC"))
 numericInput("nClusters", tags$h4("Number of clusters"), value = 3, min = 2, max = 10)
 actionButton("generate", "Generate")
+div(id="featureChoise")
 
 
 
