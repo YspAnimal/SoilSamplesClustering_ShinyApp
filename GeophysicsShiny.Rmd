@@ -53,6 +53,7 @@ dataSet <- reactive({
     group_by(Point) %>%
     mutate_all(convertToNumeric) %>%
     ungroup()
+  fullData$Point <- factor(fullData$Point, levels=unique(fullData$Point))
   rownames(fullData) <- fullData[[1]]
   rv$clearData <- fullData[complete.cases(fullData), ]
   isolate(rownames(rv$clearData) <- rv$clearData[[1]])
@@ -61,7 +62,7 @@ dataSet <- reactive({
 })
 barPlotAll <-  reactive({
   req(input$dataFile)
-  dataSet() %>%
+  dataPlot <- dataSet() %>%
     gather(2:7, key = 'Char', value = 'Value') %>%
     separate(Char, into = c("Char", "Level"), sep = 3) %>%
     ggplot(aes(x = Point, y = Value, fill = Level)) +
@@ -73,7 +74,7 @@ barPlotAll <-  reactive({
 ```
 
 
-PCA and Clustering {data-icon="fa-user"}
+Clustering {data-icon="fa-user"}
 ======================
 
 Row {data-height=600}
@@ -82,7 +83,7 @@ Row {data-height=600}
 ### Bar charts
     
 ```{r}
-renderPlot({
+renderPlotly({
   req(input$dataFile, dataSet())
   barPlotAll()
 })
@@ -91,12 +92,12 @@ renderPlot({
 ### Clustering
 
 ```{r}
-renderPlot({
+renderPlotly({
   req(input$dataFile, dataSet())
   input$generate
   pamClusters <- rv$clearData %>% select(-1) %>% scale() %>%
   pam(isolate(input$nClusters)) ## 3 clusters The most interesting case, potential error only on 2 points 40N and 48S
-  
+  rv$medoids <- rv$clearData[pamClusters$id.med, ]
   fviz_cluster(pamClusters, stand = FALSE) + MainTheme
 })
 ```
@@ -104,6 +105,19 @@ renderPlot({
 Row {data-height=300}
 -------------------------------------
 
+### Clusters medoids
+```{r}
+renderTable({
+  rv$medoids
+})
+```
+
+
+PCA {data-icon="fa-user"}
+======================
+
+Row {data-height=600}
+-------------------------------------
 ### PCA
 
 ```{r}
@@ -114,6 +128,9 @@ renderPlot({
   fviz_pca(data.pca)
 })
 ```
+
+Row {data-height=300}
+-------------------------------------
 
 ### Summary table
 
