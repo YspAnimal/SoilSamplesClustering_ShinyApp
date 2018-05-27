@@ -1,0 +1,149 @@
+---
+title: "Soil samples clustering"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    source_code: 
+    theme: yeti
+    orientation: rows
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(data.table)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(GGally)
+library(factoextra)
+library(plotly)
+library(cluster)  
+convertToNumeric <- function(x) {as.numeric(sub(",", ".", x, fixed = TRUE))}
+MainTheme <- theme_minimal() +
+  theme(axis.text.x = element_text(hjust=0.5, angle=45, vjust=0.9),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.grid.major.y = element_line(colour="grey60", linetype="dotted"),
+        panel.grid.minor.y = element_blank(),#element_line(colour="grey60", linetype="dotted"),
+        panel.grid.major.x = element_blank(),#element_line(colour="grey60", linetype="dotted"),
+        panel.grid.minor.x = element_blank())
+DBPalette <- c("#073857", "#4E91DD", "#A13764", "#DADADA",  "#484848", "#D1A34F", "#7D9099", "#2C707E", "#2F63A0")
+rv <- reactiveValues()
+```
+
+Column {.sidebar}
+======================
+```{r}
+fileInput("dataFile", tags$h4("Choose file"), accept = c(
+          "text/csv",
+          ".csv"))
+
+HTML('<hr style="color: gray;">')
+
+selectInput("clusterMethod", tags$h4("Clustering Method"), choices =  list ("PAM", "HC"))
+numericInput("nClusters", tags$h4("Number of clusters"), value = 3, min = 2, max = 10)
+actionButton("generate", "Generate")
+
+
+
+### Have to change to observeEvent(!is.null(input$dataFile))
+inFile <- reactive({input$dataFile})
+dataSet <- reactive({
+  fullData <- fread(input$dataFile$datapath, na.strings="", stringsAsFactors = FALSE) %>%
+    group_by(Point) %>%
+    mutate_all(convertToNumeric) %>%
+    ungroup()
+  rownames(fullData) <- fullData[[1]]
+  rv$clearData <- fullData[complete.cases(fullData), ]
+  isolate(rownames(rv$clearData) <- rv$clearData[[1]])
+  rv$naRows <- fullData[!complete.cases(fullData), ]
+  return(fullData)
+})
+barPlotAll <-  reactive({
+  req(input$dataFile)
+  dataSet() %>%
+    gather(2:7, key = 'Char', value = 'Value') %>%
+    separate(Char, into = c("Char", "Level"), sep = 3) %>%
+    ggplot(aes(x = Point, y = Value, fill = Level)) +
+      geom_col(position=position_dodge(0.8), width=0.7) +
+      facet_grid(Char ~., scales="free_y") +
+      scale_fill_manual(values = DBPalette) +
+      MainTheme
+}) 
+```
+
+
+PCA and Clustering {data-icon="fa-user"}
+======================
+
+Row {data-height=600}
+-------------------------------------
+
+### Bar charts
+    
+```{r}
+renderPlot({
+  req(input$dataFile, dataSet())
+  barPlotAll()
+})
+```
+    
+### Clustering
+
+```{r}
+renderPlot({
+  req(input$dataFile, dataSet())
+  input$generate
+  pamClusters <- rv$clearData %>% select(-1) %>% scale() %>%
+  pam(isolate(input$nClusters)) ## 3 clusters The most interesting case, potential error only on 2 points 40N and 48S
+  
+  fviz_cluster(pamClusters, stand = FALSE) + MainTheme
+})
+```
+
+Row {data-height=300}
+-------------------------------------
+
+### PCA
+
+```{r}
+renderPlot({
+  req(input$dataFile, dataSet())
+  input$generate
+  data.pca <- rv$clearData %>% select(-1) %>% scale() %>% prcomp()
+  fviz_pca(data.pca)
+})
+```
+
+### Summary table
+
+```{r}
+renderTable({
+  req(input$dataFile)
+  rv$clearData
+})
+```
+
+### Deleted objects
+
+```{r}
+renderTable({
+  req(input$dataFile)
+  rv$naRows 
+})
+```
+
+
+Pairs {data-icon="fa-user"}
+======================
+
+### Pairs plot
+```{r}
+renderPlotly({
+    req(input$dataFile)
+    pairsPlot <- ggpairs(dataSet()[, -1])
+  })
+```
+
+
+
