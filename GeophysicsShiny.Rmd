@@ -19,6 +19,12 @@ library(factoextra)
 library(plotly)
 library(cluster)  
 convertToNumeric <- function(x) {as.numeric(sub(",", ".", x, fixed = TRUE))}
+insertcheckboxGroupInput <- function(data, id) {
+    features <- data %>% select_if(is.numeric) %>% colnames() %>% as.list
+    #data %>% select(columns)
+    checkboxGroup <- checkboxGroupInput(id, tags$h4("Features for clusters"), choiceNames = features, choiceValues = features, selected = features)
+}
+
 MainTheme <- theme_minimal() +
   theme(axis.text.x = element_text(hjust=0.5, angle=45, vjust=0.9),
         axis.title.x = element_blank(),
@@ -42,8 +48,11 @@ HTML('<hr style="color: gray;">')
 
 selectInput("clusterMethod", tags$h4("Clustering Method"), choices =  list ("PAM", "HC"))
 numericInput("nClusters", tags$h4("Number of clusters"), value = 3, min = 2, max = 10)
-actionButton("generate", "Generate")
 div(id="featureChoise")
+
+HTML('<hr style="color: gray;">')
+
+actionButton("generate", "Generate")
 
 
 
@@ -59,6 +68,11 @@ dataSet <- reactive({
   rv$clearData <- fullData[complete.cases(fullData), ]
   isolate(rownames(rv$clearData) <- rv$clearData[[1]])
   rv$naRows <- fullData[!complete.cases(fullData), ]
+  
+  insertUI(
+    selector = "#featureChoise", 
+    ui = insertcheckboxGroupInput(fullData, "featuresClust")
+  )
   return(fullData)
 })
 barPlotAll <-  reactive({
@@ -94,12 +108,17 @@ renderPlotly({
 
 ```{r}
 renderPlotly({
-  req(input$dataFile, dataSet())
   input$generate
-  pamClusters <- rv$clearData %>% select(-1) %>% scale() %>%
-  pam(isolate(input$nClusters)) ## 3 clusters The most interesting case, potential error only on 2 points 40N and 48S
-  rv$medoids <- rv$clearData[pamClusters$id.med, ]
-  fviz_cluster(pamClusters, stand = FALSE) + MainTheme
+  req(input$dataFile, dataSet())
+  features <- isolate(input$featuresClust)
+  if (!is.null(features)) {
+    pamClusters <- rv$clearData %>% 
+      select(isolate(input$featuresClust)) %>% 
+      scale() %>%
+      pam(isolate(input$nClusters)) ## 3 clusters The most interesting case, potential error only on 2 points 40N and 48S
+    rv$medoids <- rv$clearData[pamClusters$id.med, ]
+    fviz_cluster(pamClusters, stand = FALSE) + MainTheme
+  } else {return()}
 })
 ```
 
