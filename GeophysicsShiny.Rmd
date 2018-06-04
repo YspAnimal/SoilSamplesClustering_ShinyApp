@@ -3,7 +3,7 @@ title: "Soil samples clustering"
 runtime: shiny
 output:
   flexdashboard::flex_dashboard:
-    source_code: 
+    source_code: 'https://github.com/YspAnimal/SoilSamplesClustering_ShinyApp'
     theme: yeti
     orientation: rows
 ---
@@ -19,10 +19,27 @@ library(factoextra)
 library(plotly)
 library(cluster)  
 convertToNumeric <- function(x) {as.numeric(sub(",", ".", x, fixed = TRUE))}
+
 insertcheckboxGroupInput <- function(data, id) {
     features <- data %>% select_if(is.numeric) %>% colnames() %>% as.list
     #data %>% select(columns)
-    checkboxGroup <- checkboxGroupInput(id, tags$h4("Features for clusters"), choiceNames = features, choiceValues = features, selected = features)
+    checkboxGroup <- checkboxGroupInput(id, 
+                                        tags$h4("Features for clusters"), 
+                                        choiceNames = features, 
+                                        choiceValues = features, 
+                                        selected = features)
+}
+
+generateClusters <- function(data, method, nClust) {
+  if (method == 'PAM') {
+    pamClusters <- data %>% 
+      #select(isolate(input$featuresClust)) %>% 
+      scale() %>%
+      pam(nClust)
+  } else {
+    
+  }
+  
 }
 
 MainTheme <- theme_minimal() +
@@ -33,7 +50,7 @@ MainTheme <- theme_minimal() +
         panel.grid.minor.y = element_blank(),#element_line(colour="grey60", linetype="dotted"),
         panel.grid.major.x = element_blank(),#element_line(colour="grey60", linetype="dotted"),
         panel.grid.minor.x = element_blank())
-DBPalette <- c("#073857", "#4E91DD", "#A13764", "#DADADA",  "#484848", "#D1A34F", "#7D9099", "#2C707E", "#2F63A0")
+DBPalette <- c("#E69F00", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#999999", "#2F63A0", "#56B4E9")
 rv <- reactiveValues()
 ```
 
@@ -47,6 +64,13 @@ fileInput("dataFile", tags$h4("Choose file"), accept = c(
 HTML('<hr style="color: gray;">')
 
 selectInput("clusterMethod", tags$h4("Clustering Method"), choices =  list ("PAM", "HC"))
+div(id="lincageMethod")
+conditionalPanel(
+  condition = "input.clusterMethod == \"HC\"",
+  selectInput("hcLincageMethod", 
+              tags$h4("Lincage method"),
+              list("ward.D2", "complete", "single", "average", "mcquitty", "median"))
+)
 numericInput("nClusters", tags$h4("Number of clusters"), value = 3, min = 2, max = 10)
 div(id="featureChoise")
 
@@ -107,18 +131,31 @@ renderPlotly({
 ### Clustering
 
 ```{r}
-renderPlotly({
+renderPlot({
   input$generate
   req(input$dataFile, dataSet())
   features <- isolate(input$featuresClust)
+  method <- isolate(input$clusterMethod)
+  numClusters <- isolate(input$nClusters)
   if (!is.null(features)) {
-    pamClusters <- rv$clearData %>% 
-      select(isolate(input$featuresClust)) %>% 
-      scale() %>%
-      pam(isolate(input$nClusters)) ## 3 clusters The most interesting case, potential error only on 2 points 40N and 48S
-    rv$medoids <- rv$clearData[pamClusters$id.med, ]
-    fviz_cluster(pamClusters, stand = FALSE) + MainTheme
-  } else {return()}
+    selectedData <- rv$clearData %>% 
+      select(features) %>% 
+      scale()
+    if (method == 'PAM') {
+      pamClusters <- pam(selectedData, numClusters)
+      rv$medoids <- rv$clearData[pamClusters$id.med, ]
+      fviz_cluster(pamClusters, stand = FALSE) + MainTheme
+    } else {
+      hClusters <- hclust(dist(selectedData), method = isolate(input$hcLincageMethod))
+      fviz_dend(hClusters, 
+                k = numClusters,
+                k_colors = DBPalette[-(1:2)],
+                color_labels_by_k = T,
+                rect = T)
+    }
+  } else {
+    return()
+  }
 })
 ```
 
